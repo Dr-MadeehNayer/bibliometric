@@ -386,6 +386,103 @@ def create_topic_table(topics_data):
                     st.error(f"Error during topic analysis: {str(e)}")
 
 
+
+def analyze_journals(df):
+    """Analyze journal citations and create visualization"""
+    # Extract journal information and citations
+    journal_data = df[['journal', 'citations']].copy()
+    
+    # Group by journal and calculate metrics
+    journal_stats = journal_data.groupby('journal').agg({
+        'citations': ['count', 'sum', 'mean']
+    }).reset_index()
+    
+    # Rename columns
+    journal_stats.columns = ['journal', 'num_papers', 'total_citations', 'avg_citations']
+    
+    # Sort by total citations
+    journal_stats = journal_stats.sort_values('total_citations', ascending=False)
+    
+    # Create visualization
+    fig, ax = plt.subplots(figsize=(12, 6))
+    
+    # Plot total citations
+    bars = ax.bar(journal_stats['journal'][:10], journal_stats['total_citations'][:10])
+    
+    # Customize the plot
+    plt.xticks(rotation=45, ha='right')
+    plt.title('Top 10 Most Cited Journals')
+    plt.xlabel('Journal')
+    plt.ylabel('Total Citations')
+    
+    # Add value labels on the bars
+    for bar in bars:
+        height = bar.get_height()
+        ax.text(bar.get_x() + bar.get_width()/2., height,
+                f'{int(height)}',
+                ha='center', va='bottom')
+    
+    # Adjust layout
+    plt.tight_layout()
+    
+    return fig, journal_stats
+
+def analyze_prolific_authors(df):
+    """Analyze authors by number of publications and citations"""
+    # Create a list of all authors with their papers and citations
+    author_data = []
+    
+    for idx, row in df.iterrows():
+        authors = row['author'] if isinstance(row['author'], list) else [row['author']]
+        for author in authors:
+            author_data.append({
+                'author': author,
+                'citations': row['citations'],
+                'paper_title': row['title']
+            })
+    
+    # Convert to DataFrame
+    author_df = pd.DataFrame(author_data)
+    
+    # Calculate author metrics
+    author_stats = author_df.groupby('author').agg({
+        'paper_title': 'count',
+        'citations': 'sum'
+    }).reset_index()
+    
+    # Rename columns
+    author_stats.columns = ['author', 'num_papers', 'total_citations']
+    
+    # Calculate average citations per paper
+    author_stats['avg_citations_per_paper'] = author_stats['total_citations'] / author_stats['num_papers']
+    
+    # Sort by number of papers
+    author_stats = author_stats.sort_values('num_papers', ascending=False)
+    
+    # Create visualization
+    fig, ax = plt.subplots(figsize=(12, 6))
+    
+    # Plot number of papers
+    bars = ax.bar(author_stats['author'][:10], author_stats['num_papers'][:10])
+    
+    # Customize the plot
+    plt.xticks(rotation=45, ha='right')
+    plt.title('Top 10 Authors by Number of Publications')
+    plt.xlabel('Author')
+    plt.ylabel('Number of Publications')
+    
+    # Add value labels on the bars
+    for bar in bars:
+        height = bar.get_height()
+        ax.text(bar.get_x() + bar.get_width()/2., height,
+                f'{int(height)}',
+                ha='center', va='bottom')
+    
+    # Adjust layout
+    plt.tight_layout()
+    
+    return fig, author_stats
+
 # Streamlit app layout
 def main():
     st.title('Bibliometric Analysis with Google Scholar Data')
@@ -435,12 +532,14 @@ def main():
 
     # Tabs for different functionalities
     if not df_publications.empty:
-        tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
             "Citation Analysis", 
             "Keyword Analysis", 
             "Citation Statistics", 
             "Author Insights",
-            "Topics Analysis"
+            "Topics Analysis",
+            "Journal Analysis",
+            "Prolific Authors"
         ])
 
         with tab1:
@@ -566,6 +665,79 @@ def main():
                 )
             except Exception as e:
                 st.sidebar.error(f"Error exporting results: {str(e)}")
+
+        with tab6:
+            st.write("### Journal Analysis")
+            st.write("This tab shows the most cited journals and their publication metrics.")
+            
+            try:
+                # Create journal visualization and get stats
+                journal_fig, journal_stats = analyze_journals(df_publications)
+                
+                # Display the visualization
+                st.pyplot(journal_fig)
+                plt.close()
+                
+                # Display detailed statistics
+                st.subheader("Journal Statistics")
+                
+                # Format the dataframe for display
+                journal_stats['avg_citations'] = journal_stats['avg_citations'].round(2)
+                journal_stats = journal_stats.sort_values('total_citations', ascending=False)
+                
+                # Display top journals table
+                st.dataframe(journal_stats.style.format({
+                    'total_citations': '{:,.0f}',
+                    'avg_citations': '{:.2f}'
+                }))
+                
+                # Add summary metrics
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Total Journals", len(journal_stats))
+                with col2:
+                    st.metric("Most Cited Journal", journal_stats.iloc[0]['journal'])
+                with col3:
+                    st.metric("Highest Average Citations", f"{journal_stats['avg_citations'].max():.1f}")
+                
+            except Exception as e:
+                st.error(f"Error in journal analysis: {str(e)}")
+
+        with tab7:
+            st.write("### Prolific Authors")
+            st.write("This tab shows authors with the highest number of publications and their citation metrics.")
+            
+            try:
+                # Create author visualization and get stats
+                author_fig, author_stats = analyze_prolific_authors(df_publications)
+                
+                # Display the visualization
+                st.pyplot(author_fig)
+                plt.close()
+                
+                # Display detailed statistics
+                st.subheader("Author Statistics")
+                
+                # Format the dataframe for display
+                author_stats['avg_citations_per_paper'] = author_stats['avg_citations_per_paper'].round(2)
+                
+                # Display top authors table
+                st.dataframe(author_stats.style.format({
+                    'total_citations': '{:,.0f}',
+                    'avg_citations_per_paper': '{:.2f}'
+                }))
+                
+                # Add summary metrics
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Total Authors", len(author_stats))
+                with col2:
+                    st.metric("Most Prolific Author", author_stats.iloc[0]['author'])
+                with col3:
+                    st.metric("Highest Citations", f"{author_stats['total_citations'].max():,.0f}")
+                
+            except Exception as e:
+                st.error(f"Error in author analysis: {str(e)}")
 
     # Footer
     st.markdown("<hr><center><small>This tool is developed by Dr. Madeeh Elgedawy</small></center>", unsafe_allow_html=True)
