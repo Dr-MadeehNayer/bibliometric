@@ -239,6 +239,16 @@ def preprocess_text(text):
         return text
     return ''
 
+ddef get_feature_names(vectorizer):
+    """Helper function to get feature names from vectorizer regardless of sklearn version"""
+    try:
+        return vectorizer.get_feature_names_out()
+    except AttributeError:
+        try:
+            return vectorizer.get_feature_names()
+        except AttributeError:
+            return np.array(vectorizer.vocabulary_)
+
 def analyze_topics(df, num_topics=5, num_words=10):
     """Analyze topics in the abstracts using LDA"""
     # Preprocess abstracts
@@ -249,8 +259,8 @@ def analyze_topics(df, num_topics=5, num_words=10):
         max_features=1000,
         min_df=2,
         max_df=0.95,
-        stop_words='english',  # Using scikit-learn's built-in English stopwords
-        token_pattern=r'[a-zA-Z]+(?:\s[a-zA-Z]+)*',  # Match words and phrases
+        stop_words='english',
+        token_pattern=r'[a-zA-Z]+(?:\s[a-zA-Z]+)*',
     )
     
     doc_term_matrix = vectorizer.fit_transform(processed_abstracts)
@@ -262,13 +272,13 @@ def analyze_topics(df, num_topics=5, num_words=10):
         max_iter=20,
         learning_method='batch',
         evaluate_every=-1,
-        n_jobs=-1,  # Use all available cores
+        n_jobs=-1,
     )
     
     lda_output = lda_model.fit_transform(doc_term_matrix)
     
-    # Get feature names (words) using the new method
-    feature_names = vectorizer.get_feature_names_out()
+    # Get feature names using the helper function
+    feature_names = get_feature_names(vectorizer)
     
     # Prepare topic visualization data
     topics_data = []
@@ -287,6 +297,7 @@ def analyze_topics(df, num_topics=5, num_words=10):
     topic_distributions = lda_output
     
     return topics_data, dominant_topics, topic_distributions, vectorizer, lda_model, doc_term_matrix
+
 
 def visualize_topics(topics_data):
     """Create visualizations for topic analysis"""
@@ -316,29 +327,48 @@ def visualize_topics(topics_data):
 def create_interactive_topic_viz(vectorizer, lda_model, doc_term_matrix):
     """Create interactive topic visualization using pyLDAvis"""
     try:
-        # Use prepare_sklearn directly
-        prepared_data = pyLDAvis.sklearn.prepare(
-            lda_model, 
-            doc_term_matrix, 
-            vectorizer,
-            mds='mmds',  # using metric MDS
-            sort_topics=True
-        )
+        # Get feature names
+        feature_names = get_feature_names(vectorizer)
+        
+        # Convert document term matrix to dense if it's sparse
+        doc_term_matrix_dense = doc_term_matrix.toarray()
+        
+        # Calculate term frequencies
+        term_frequencies = np.sum(doc_term_matrix_dense, axis=0)
+        
+        # Create the visualization manually
+        data = {
+            'topic_term_dists': lda_model.components_,
+            'doc_topic_dists': lda_model.transform(doc_term_matrix),
+            'doc_lengths': np.sum(doc_term_matrix_dense, axis=1),
+            'vocab': feature_names,
+            'term_frequency': term_frequencies
+        }
+        
+        # Prepare the visualization
+        prepared_data = pyLDAvis.prepare(**data)
         
         # Convert to HTML
         html_string = pyLDAvis.prepared_data_to_html(prepared_data)
         
         # Display in Streamlit
         st.components.v1.html(html_string, width=1300, height=800)
+        
     except Exception as e:
         st.error(f"Error in visualization preparation: {str(e)}")
+        
         # Fallback visualization
         st.write("Unable to create interactive visualization. Displaying simple topic summary instead:")
+        
+        # Get feature names for fallback visualization
+        feature_names = get_feature_names(vectorizer)
+        
+        # Display simple topic summary
         for idx, topic_dist in enumerate(lda_model.components_):
-            top_terms = [vectorizer.get_feature_names_out()[i] 
-                        for i in topic_dist.argsort()[:-10-1:-1]]
+            top_terms_idx = topic_dist.argsort()[:-10-1:-1]
+            top_terms = [feature_names[i] for i in top_terms_idx]
             st.write(f"Topic {idx + 1}: {', '.join(top_terms)}")
-
+            
 # Streamlit app layout
 def main():
     st.title('Bibliometric Analysis with Google Scholar Data')
