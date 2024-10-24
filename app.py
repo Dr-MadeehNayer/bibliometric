@@ -34,7 +34,7 @@ def extract_publication_data(results):
     for pub in results:
         data['title'].append(pub['bib'].get('title', 'N/A'))
         data['author'].append(pub['bib'].get('author', 'N/A'))
-        data['year'].append(pub['bib'].get('pub_year', 0))
+        data['year'].append(pub['bib'].get('pub_year', 'N/A'))
         data['citations'].append(pub.get('num_citations', 0))
         data['abstract'].append(pub.get('bib', {}).get('abstract', 'N/A'))  # Fetching the abstract
         data['url'].append(pub.get('pub_url', 'N/A'))  # Fetching the article URL
@@ -43,8 +43,13 @@ def extract_publication_data(results):
 
 # Function for citation trend visualization
 def visualize_citation_trends(df):
-    # Filter out records without years
-    df = df[df['year'] != 'N/A']
+    # Convert the 'year' column to numeric, setting errors='coerce' will convert non-integer values to NaN
+    df['year'] = pd.to_numeric(df['year'], errors='coerce')
+    
+    # Drop rows where 'year' is NaN (non-integer values)
+    df = df.dropna(subset=['year'])
+    
+    # Convert 'year' column to integers
     df['year'] = df['year'].astype(int)
 
     # Plot number of publications per year
@@ -65,6 +70,7 @@ def visualize_citation_trends(df):
     ax.set_xlabel('Number of Citations')
     ax.set_ylabel('Frequency')
     st.pyplot(fig)
+
 
 # Function to analyze keywords in titles
 def analyze_keywords_in_titles(df, num_keywords=10):
@@ -97,8 +103,8 @@ def analyze_keywords_in_titles(df, num_keywords=10):
 st.title('Bibliometric Analysis with Google Scholar Data - IPA Case Study')
 
 # User inputs
-query = st.text_input('Enter your search query (e.g., "artificial intelligence in healthcare")', '')
-num_results = st.number_input('Enter the number of articles to retrieve', min_value=1, max_value=100, value=10)
+query = st.text_input('Enter your search query (e.g., "explainable artificial intelligence")', '')
+num_results = st.number_input('Enter the number of articles to retrieve', min_value=1, max_value=500, value=100)
 
 if query:
     # Fetch and display data based on user input
