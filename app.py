@@ -34,7 +34,7 @@ def extract_publication_data(results):
     for pub in results:
         data['title'].append(pub['bib'].get('title', 'N/A'))
         data['author'].append(pub['bib'].get('author', 'N/A'))
-        data['year'].append(pub['bib'].get('pub_year', 'N/A'))
+        data['year'].append(pub['bib'].get('pub_year', 0))
         data['citations'].append(pub.get('num_citations', 0))
         data['abstract'].append(pub.get('bib', {}).get('abstract', 'N/A'))  # Fetching the abstract
         data['url'].append(pub.get('pub_url', 'N/A'))  # Fetching the article URL
