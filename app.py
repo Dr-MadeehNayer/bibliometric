@@ -267,7 +267,7 @@ def analyze_topics(df, num_topics=5, num_words=10):
     
     lda_output = lda_model.fit_transform(doc_term_matrix)
     
-    # Get feature names (words)
+    # Get feature names (words) using the new method
     feature_names = vectorizer.get_feature_names_out()
     
     # Prepare topic visualization data
@@ -315,12 +315,36 @@ def visualize_topics(topics_data):
 
 def create_interactive_topic_viz(vectorizer, lda_model, doc_term_matrix):
     """Create interactive topic visualization using pyLDAvis"""
-    # Prepare pyLDAvis visualization
-    panel = pyLDAvis.sklearn.prepare(lda_model, doc_term_matrix, vectorizer)
-    # Convert to HTML
-    html_string = pyLDAvis.prepared_data_to_html(panel)
-    # Display in Streamlit
-    st.components.v1.html(html_string, width=1300, height=800)
+    try:
+        # Create the data for visualization
+        # Convert sparse matrix to dense if needed
+        if isinstance(doc_term_matrix, np.ndarray):
+            doc_term_matrix_dense = doc_term_matrix
+        else:
+            doc_term_matrix_dense = doc_term_matrix.todense()
+        
+        # Prepare the parameters for pyLDAvis
+        prepared_data = pyLDAvis._prepare(
+            topic_term_dists=lda_model.components_,
+            doc_topic_dists=lda_model.transform(doc_term_matrix),
+            doc_lengths=np.sum(doc_term_matrix_dense, axis=1).A1,
+            vocab=vectorizer.get_feature_names_out(),
+            term_frequency=np.sum(doc_term_matrix_dense, axis=0).A1
+        )
+        
+        # Convert to HTML
+        html_string = pyLDAvis.prepared_data_to_html(prepared_data)
+        
+        # Display in Streamlit
+        st.components.v1.html(html_string, width=1300, height=800)
+    except Exception as e:
+        st.error(f"Error in visualization preparation: {str(e)}")
+        # Fallback visualization
+        st.write("Unable to create interactive visualization. Displaying simple topic summary instead:")
+        for idx, topic_dist in enumerate(lda_model.components_):
+            top_terms = [vectorizer.get_feature_names_out()[i] 
+                        for i in topic_dist.argsort()[:-10-1:-1]]
+            st.write(f"Topic {idx + 1}: {', '.join(top_terms)}")
 
 # Streamlit app layout
 def main():
