@@ -36,6 +36,7 @@ def extract_publication_data(results):
         'citations': [],
         'abstract': [],
         'url': [],
+        'journal': [],  # Added journal field
         'APA_citation': []
     }
     
@@ -47,9 +48,9 @@ def extract_publication_data(results):
         citations = pub.get('num_citations', 0)
         abstract = pub.get('bib', {}).get('abstract', 'N/A')
         url = pub.get('pub_url', 'N/A')
+        journal = pub['bib'].get('journal', 'N/A')  # Extract journal
         
         # Get additional information for citation
-        journal = pub['bib'].get('journal', '')
         volume = pub['bib'].get('volume', '')
         issue = pub['bib'].get('number', '')
         pages = pub['bib'].get('pages', '')
@@ -97,9 +98,11 @@ def extract_publication_data(results):
         data['citations'].append(citations)
         data['abstract'].append(abstract)
         data['url'].append(url)
+        data['journal'].append(journal)  # Store journal
         data['APA_citation'].append(apa_citation)
     
     return pd.DataFrame(data)
+
 
 # Function for citation trend visualization
 def visualize_citation_trends(df):
@@ -392,6 +395,12 @@ def analyze_journals(df):
     # Extract journal information and citations
     journal_data = df[['journal', 'citations']].copy()
     
+    # Remove entries with N/A journals
+    journal_data = journal_data[journal_data['journal'] != 'N/A']
+    
+    if len(journal_data) == 0:
+        raise ValueError("No journal information available in the dataset")
+    
     # Group by journal and calculate metrics
     journal_stats = journal_data.groupby('journal').agg({
         'citations': ['count', 'sum', 'mean']
@@ -406,12 +415,16 @@ def analyze_journals(df):
     # Create visualization
     fig, ax = plt.subplots(figsize=(12, 6))
     
+    # Get top 10 journals (or less if fewer journals exist)
+    n_journals = min(10, len(journal_stats))
+    
     # Plot total citations
-    bars = ax.bar(journal_stats['journal'][:10], journal_stats['total_citations'][:10])
+    bars = ax.bar(journal_stats['journal'][:n_journals], 
+                  journal_stats['total_citations'][:n_journals])
     
     # Customize the plot
     plt.xticks(rotation=45, ha='right')
-    plt.title('Top 10 Most Cited Journals')
+    plt.title(f'Top {n_journals} Most Cited Journals')
     plt.xlabel('Journal')
     plt.ylabel('Total Citations')
     
@@ -671,37 +684,41 @@ def main():
             st.write("This tab shows the most cited journals and their publication metrics.")
             
             try:
-                # Create journal visualization and get stats
-                journal_fig, journal_stats = analyze_journals(df_publications)
-                
-                # Display the visualization
-                st.pyplot(journal_fig)
-                plt.close()
-                
-                # Display detailed statistics
-                st.subheader("Journal Statistics")
-                
-                # Format the dataframe for display
-                journal_stats['avg_citations'] = journal_stats['avg_citations'].round(2)
-                journal_stats = journal_stats.sort_values('total_citations', ascending=False)
-                
-                # Display top journals table
-                st.dataframe(journal_stats.style.format({
-                    'total_citations': '{:,.0f}',
-                    'avg_citations': '{:.2f}'
-                }))
-                
-                # Add summary metrics
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric("Total Journals", len(journal_stats))
-                with col2:
-                    st.metric("Most Cited Journal", journal_stats.iloc[0]['journal'])
-                with col3:
-                    st.metric("Highest Average Citations", f"{journal_stats['avg_citations'].max():.1f}")
-                
+                if df_publications['journal'].isna().all() or all(df_publications['journal'] == 'N/A'):
+                    st.warning("No journal information available in the dataset.")
+                else:
+                    # Create journal visualization and get stats
+                    journal_fig, journal_stats = analyze_journals(df_publications)
+                    
+                    # Display the visualization
+                    st.pyplot(journal_fig)
+                    plt.close()
+                    
+                    # Display detailed statistics
+                    st.subheader("Journal Statistics")
+                    
+                    # Format the dataframe for display
+                    journal_stats['avg_citations'] = journal_stats['avg_citations'].round(2)
+                    journal_stats = journal_stats.sort_values('total_citations', ascending=False)
+                    
+                    # Display top journals table
+                    st.dataframe(journal_stats.style.format({
+                        'total_citations': '{:,.0f}',
+                        'avg_citations': '{:.2f}'
+                    }))
+                    
+                    # Add summary metrics
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Total Journals", len(journal_stats))
+                    with col2:
+                        st.metric("Most Cited Journal", journal_stats.iloc[0]['journal'])
+                    with col3:
+                        st.metric("Highest Average Citations", f"{journal_stats['avg_citations'].max():.1f}")
+            
             except Exception as e:
                 st.error(f"Error in journal analysis: {str(e)}")
+
 
         with tab7:
             st.write("### Prolific Authors")
