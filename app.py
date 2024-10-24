@@ -21,7 +21,6 @@ def fetch_publications(query, num_results=10):
             break
     return results
 
-# Function to extract relevant data from publications
 def extract_publication_data(results):
     data = {
         'title': [],
@@ -35,24 +34,59 @@ def extract_publication_data(results):
     }
     
     for pub in results:
+        # Extract basic publication info
         title = pub['bib'].get('title', 'N/A')
         authors = pub['bib'].get('author', ['N/A'])
         year = pub['bib'].get('pub_year', 'N/A')
         citations = pub.get('num_citations', 0)
         abstract = pub.get('bib', {}).get('abstract', 'N/A')
         url = pub.get('pub_url', 'N/A')
-
-        # Store full author list
-        data['author'].append(authors)
         
+        # Get additional information for citation
+        journal = pub['bib'].get('journal', '')
+        volume = pub['bib'].get('volume', '')
+        issue = pub['bib'].get('number', '')
+        pages = pub['bib'].get('pages', '')
+        doi = pub.get('doi', '')
+
+        # Format authors for APA citation
+        if len(authors) == 1:
+            author_citation = authors[0]
+        elif len(authors) == 2:
+            author_citation = f"{authors[0]} & {authors[1]}"
+        elif len(authors) > 2:
+            author_citation = f"{authors[0]} et al."
+
         # Create display version with et al.
         author_display = authors[0] + " et al." if len(authors) > 1 else authors[0]
-        data['author_display'].append(author_display)
 
-        # Generate APA-style citation
-        apa_citation = f"{author_display} ({year}). {title}."
+        # Build APA citation
+        apa_citation = f"{author_citation} ({year}). {title}"
+        
+        # Add journal info if available
+        if journal:
+            apa_citation += f". {journal}"
+            
+            # Add volume, issue, pages
+            if volume:
+                apa_citation += f", {volume}"
+                if issue:
+                    apa_citation += f"({issue})"
+            if pages:
+                apa_citation += f", {pages}"
+        
+        # Add DOI or URL
+        if doi:
+            apa_citation += f". https://doi.org/{doi}"
+        elif url and url != 'N/A':
+            apa_citation += f". Retrieved from {url}"
+        
+        apa_citation += "."  # Final period
 
+        # Store data
         data['title'].append(title)
+        data['author'].append(authors)
+        data['author_display'].append(author_display)
         data['year'].append(year)
         data['citations'].append(citations)
         data['abstract'].append(abstract)
@@ -60,7 +94,6 @@ def extract_publication_data(results):
         data['APA_citation'].append(apa_citation)
     
     return pd.DataFrame(data)
-
 # Function for citation trend visualization
 def visualize_citation_trends(df):
     # Convert the 'year' column to numeric, setting errors='coerce' will convert non-integer values to NaN
