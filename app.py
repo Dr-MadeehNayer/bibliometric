@@ -20,9 +20,10 @@ def fetch_publications(query, num_results=10):
             break
     return results
 
-# Function to extract relevant data from publications
+# Function to extract relevant data from publications, adding checkboxes as a column
 def extract_publication_data(results):
     data = {
+        'Select': [],  # Checkbox column
         'title': [],
         'author': [],
         'year': [],
@@ -32,7 +33,7 @@ def extract_publication_data(results):
         'APA_citation': []  # Added APA citation field
     }
     
-    for pub in results:
+    for i, pub in enumerate(results):
         title = pub['bib'].get('title', 'N/A')
         author = pub['bib'].get('author', 'N/A')
         year = pub['bib'].get('pub_year', 'N/A')
@@ -47,6 +48,8 @@ def extract_publication_data(results):
         # Generate APA-style citation
         apa_citation = f"{author} ({year}). {title}."
 
+        # Add a checkbox to the first column
+        data['Select'].append(st.checkbox(f"Select {title}", key=f'row_{i}'))
         data['title'].append(title)
         data['author'].append(author)
         data['year'].append(year)
@@ -147,26 +150,25 @@ else:
         if results:
             df_publications = extract_publication_data(results)
             st.write("Fetched Data:")
-            st.dataframe(df_publications)
+            st.dataframe(df_publications.drop(columns='Select'))  # Hide 'Select' column in the table view
         else:
             st.write("No results found for the query.")
 
-# Allow users to delete rows from the DataFrame via checkboxes for each row
+# Allow users to delete rows from the DataFrame based on checkboxes
 if not df_publications.empty:
     st.write("### Select rows to delete:")
     
-    # Create checkboxes for each row
-    selected_rows = []
-    for index, row in df_publications.iterrows():
-        if st.checkbox(f"Delete {row['title']}", key=index):
-            selected_rows.append(index)
-
-    # Button to delete selected rows
+    # Create a new DataFrame with selected rows filtered out
+    delete_rows = df_publications['Select'] == False
+    df_publications_filtered = df_publications[delete_rows]
+    
+    # Button to delete selected rows and refresh the analysis
     if st.button('Delete Selected Rows'):
-        # Drop selected rows
-        df_publications = df_publications.drop(selected_rows)
         st.write("Updated Data after Deleting Rows:")
-        st.dataframe(df_publications)
+        st.dataframe(df_publications_filtered.drop(columns='Select'))
+
+        # Update the DataFrame and rerun the analysis with the remaining rows
+        df_publications = df_publications_filtered
 
 # Tabs for different functionalities
 if not df_publications.empty:
