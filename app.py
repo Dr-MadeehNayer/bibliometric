@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import re
 from collections import Counter
+import networkx as nx
 
 # Function to fetch publications based on a search query
 def fetch_publications(query, num_results=10):
@@ -114,6 +115,25 @@ def analyze_keywords_in_titles(df, num_keywords=10):
     
     return common_keywords
 
+# Function for author insights using a network graph
+def visualize_author_network(df):
+    st.subheader("Author Collaboration Network")
+
+    # Extract author information and build graph
+    G = nx.Graph()
+    
+    for authors in df['author']:
+        if isinstance(authors, list) and len(authors) > 1:
+            for i in range(len(authors)):
+                for j in range(i+1, len(authors)):
+                    G.add_edge(authors[i], authors[j], weight=1)
+    
+    # Set graph options
+    plt.figure(figsize=(10, 8))
+    pos = nx.spring_layout(G, k=0.5)  # Position nodes using Fruchterman-Reingold force-directed algorithm
+    nx.draw(G, pos, with_labels=True, node_color='skyblue', edge_color='gray', node_size=2000, font_size=10, font_weight='bold')
+    st.pyplot(plt)
+
 # Streamlit app layout
 st.title('Bibliometric Analysis with Google Scholar Data')
 
@@ -132,17 +152,12 @@ else:
     # User inputs if no file is uploaded
     query = st.text_input('Enter your search query (e.g., "artificial intelligence in healthcare")', '')
 
-    # Combine slider and textbox to pick number of articles
-    st.write("Select or enter the number of articles to retrieve:")
+    # Slider to pick number of articles
     num_results_slider = st.slider('Pick the number of articles:', min_value=1, max_value=100, value=10)
-    num_results_textbox = st.number_input('Or enter the number of articles:', min_value=1, max_value=100, value=num_results_slider)
-
-    # Use the textbox value if it's been entered, otherwise use the slider value
-    num_results = num_results_textbox if num_results_textbox else num_results_slider
 
     if query:
         # Fetch and display data based on user input
-        results = fetch_publications(query, num_results=num_results)
+        results = fetch_publications(query, num_results=num_results_slider)
         
         if results:
             df_publications = extract_publication_data(results)
@@ -153,7 +168,7 @@ else:
 
 # Tabs for different functionalities
 if not df_publications.empty:
-    tab1, tab2, tab3 = st.tabs(["Citation Analysis", "Keyword Analysis", "Citation Statistics"])
+    tab1, tab2, tab3, tab4 = st.tabs(["Citation Analysis", "Keyword Analysis", "Citation Statistics", "Author Insights"])
 
     with tab1:
         st.write("### Citation Analysis")
@@ -171,6 +186,11 @@ if not df_publications.empty:
         st.write("This tab shows basic statistics for citation counts (e.g., mean, median, standard deviation).")
         citation_stats = df_publications['citations'].describe()
         st.write(citation_stats)
+
+    with tab4:
+        st.write("### Author Insights")
+        st.write("This tab shows a network graph of author collaborations.")
+        visualize_author_network(df_publications)
 
 # Footer
 st.markdown("<hr><center><small>This tool is developed by Dr. Madeeh Elgedawy</small></center>", unsafe_allow_html=True)
