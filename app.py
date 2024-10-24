@@ -303,12 +303,12 @@ def visualize_topics(topics_data):
         ax.set_xlabel('Weight')
         ax.set_title(f'Top Words in Topic {topic["topic_id"]}')
         
-        # Add weight values on the bars
+        # Add weight values on the bars - Fixed the text positioning
         for i, bar in enumerate(bars):
             width = bar.get_width()
             ax.text(width, bar.get_y() + bar.get_height()/2,
                    f'{topic["weights"][i]:.3f}',
-                   ha='left', va='center', x=width+0.01)
+                   ha='left', va='center')  # Removed the x parameter
         
         st.pyplot(fig)
         plt.close()
