@@ -9,7 +9,7 @@ import re
 from collections import Counter
 
 # Function to fetch publications based on a search query
-def fetch_publications(query, num_results=10):
+def fetch_publications(query, num_results=50):
     search_query = scholarly.search_pubs(query)
     results = []
     for _ in range(num_results):
@@ -122,11 +122,10 @@ query = st.text_input('Enter your search query (e.g., "artificial intelligence i
 
 # Combine slider and textbox to pick number of articles
 st.write("Select or enter the number of articles to retrieve:")
-num_results_slider = st.slider('Pick the number of articles:', min_value=1, max_value=100, value=10)
-num_results_textbox = st.number_input('Or enter the number of articles:', min_value=1, max_value=100, value=num_results_slider)
+num_results_slider = st.slider('Pick the number of articles:', min_value=1, max_value=500, value=50)
 
 # Use the textbox value if it's been entered, otherwise use the slider value
-num_results = num_results_textbox if num_results_textbox else num_results_slider
+num_results = num_results_slider
 
 if query:
     # Fetch and display data based on user input
