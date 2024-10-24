@@ -3,5 +3,8 @@ scholarly
 pandas
 matplotlib
 seaborn
-numpy
 networkx
+scikit-learn
+nltk
+pyLDAvis
+numpy
