@@ -5,6 +5,5 @@ matplotlib
 seaborn
 networkx
 scikit-learn
-nltk
-pyldavis==3.2.2
+pyLDAvis
 numpy
