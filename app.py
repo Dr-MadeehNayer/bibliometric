@@ -239,7 +239,7 @@ def preprocess_text(text):
         return text
     return ''
 
-def get_feature_names(vectorizer):
+ddef get_feature_names(vectorizer):
     """Helper function to get feature names from vectorizer regardless of sklearn version"""
     try:
         return vectorizer.get_feature_names_out()
@@ -299,6 +299,7 @@ def analyze_topics(df, num_topics=5, num_words=10):
     return topics_data, dominant_topics, topic_distributions, vectorizer, lda_model, doc_term_matrix
 
 
+
 def visualize_topics(topics_data):
     """Create visualizations for topic analysis"""
     # Topic-Word Distribution Plot
@@ -314,65 +315,86 @@ def visualize_topics(topics_data):
         ax.set_xlabel('Weight')
         ax.set_title(f'Top Words in Topic {topic["topic_id"]}')
         
-        # Add weight values on the bars - Fixed the text positioning
+        # Add weight values on the bars
         for i, bar in enumerate(bars):
             width = bar.get_width()
             ax.text(width, bar.get_y() + bar.get_height()/2,
                    f'{topic["weights"][i]:.3f}',
-                   ha='left', va='center')  # Removed the x parameter
+                   ha='left', va='center')
         
         st.pyplot(fig)
         plt.close()
 
-def create_interactive_topic_viz(vectorizer, lda_model, doc_term_matrix):
-    """Create interactive topic visualization using pyLDAvis"""
-    try:
-        # Get feature names
-        feature_names = get_feature_names(vectorizer)
+def create_topic_table(topics_data):
+    """Create a tabular view of topics"""
+    # Prepare data for the table
+    table_data = []
+    for topic in topics_data:
+        # Create word-weight pairs
+        word_weights = [f"{word} ({weight:.3f})" 
+                       for word, weight in zip(topic['words'], topic['weights'])]
+        table_data.append({
+            'Topic': f"Topic {topic['topic_id']}",
+            'Top Words': ", ".join(word_weights)
+        })
+    
+    # Convert to DataFrame and display
+    topics_df = pd.DataFrame(table_data)
+    st.table(topics_df)
+
+# Update the Topics Analysis tab section in main():
+    with tab5:
+        st.write("### Topics Analysis")
+        st.write("This tab shows the main themes and topics discussed in the papers based on abstract analysis.")
         
-        # Convert document term matrix to dense if it's sparse
-        doc_term_matrix_dense = doc_term_matrix.toarray()
+        # Add number of topics selector
+        num_topics = st.slider('Select number of topics to extract:', 
+                             min_value=2, max_value=10, value=5)
         
-        # Calculate term frequencies
-        term_frequencies = np.sum(doc_term_matrix_dense, axis=0)
+        # Add number of words per topic selector
+        num_words = st.slider('Select number of words per topic:', 
+                            min_value=5, max_value=20, value=10)
         
-        # Create the visualization manually
-        data = {
-            'topic_term_dists': lda_model.components_,
-            'doc_topic_dists': lda_model.transform(doc_term_matrix),
-            'doc_lengths': np.sum(doc_term_matrix_dense, axis=1),
-            'vocab': feature_names,
-            'term_frequency': term_frequencies
-        }
-        
-        # Prepare the visualization
-        prepared_data = pyLDAvis.prepare(**data)
-        
-        # Convert to HTML
-        html_string = pyLDAvis.prepared_data_to_html(prepared_data)
-        
-        # Display in Streamlit
-        st.components.v1.html(html_string, width=1300, height=800)
-        
-    except Exception as e:
-        st.error(f"Error in visualization preparation: {str(e)}")
-        
-        # Fallback visualization
-        st.write("Unable to create interactive visualization. Displaying simple topic summary instead:")
-        
-        # Get feature names for fallback visualization
-        feature_names = get_feature_names(vectorizer)
-        
-        # Display simple topic summary
-        for idx, topic_dist in enumerate(lda_model.components_):
-            top_terms_idx = topic_dist.argsort()[:-10-1:-1]
-            top_terms = [feature_names[i] for i in top_terms_idx]
-            st.write(f"Topic {idx + 1}: {', '.join(top_terms)}")
-            
+        # Check if we have abstracts to analyze
+        if df_publications['abstract'].isna().all() or all(df_publications['abstract'] == 'N/A'):
+            st.warning("No abstracts available for topic analysis.")
+        else:
+            # Perform topic analysis
+            with st.spinner('Analyzing topics...'):
+                try:
+                    topics_data, dominant_topics, topic_distributions, vectorizer, lda_model, doc_term_matrix = \
+                        analyze_topics(df_publications, num_topics=num_topics, num_words=num_words)
+                    
+                    # Display topic visualizations
+                    st.subheader("Topic-Word Distributions")
+                    visualize_topics(topics_data)
+                    
+                    # Display topic table
+                    st.subheader("Topics Summary")
+                    create_topic_table(topics_data)
+                    
+                    # Display document-topic assignments
+                    st.subheader("Document-Topic Assignments")
+                    doc_topics_df = pd.DataFrame({
+                        'Title': df_publications['title'],
+                        'Dominant Topic': dominant_topics + 1,
+                        'Top Words': [topics_data[topic]['words'][:5] for topic in dominant_topics]
+                    })
+                    st.dataframe(doc_topics_df)
+
+                except Exception as e:
+                    st.error(f"Error during topic analysis: {str(e)}")
+
+
 # Streamlit app layout
 def main():
     st.title('Bibliometric Analysis with Google Scholar Data')
 
+    # Add sidebar for search settings
+    st.sidebar.header("Search Settings")
+    if st.sidebar.checkbox("Use custom search options", False):
+        st.sidebar.info("Customize your search parameters")
+        
     # File upload section
     uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
 
@@ -381,9 +403,13 @@ def main():
 
     # If CSV file is uploaded, load the data into DataFrame
     if uploaded_file:
-        df_publications = pd.read_csv(uploaded_file)
-        st.write("Uploaded Data:")
-        st.dataframe(df_publications)
+        try:
+            df_publications = pd.read_csv(uploaded_file)
+            st.success("File successfully uploaded!")
+            st.write("Uploaded Data:")
+            st.dataframe(df_publications)
+        except Exception as e:
+            st.error(f"Error reading file: {str(e)}")
     else:
         # User inputs if no file is uploaded
         query = st.text_input('Enter your search query (e.g., "artificial intelligence in healthcare")', '')
@@ -393,15 +419,19 @@ def main():
 
         if query:
             with st.spinner('Fetching publications...'):
-                # Fetch and display data based on user input
-                results = fetch_publications(query, num_results=num_results_slider)
-                
-                if results:
-                    df_publications = extract_publication_data(results)
-                    st.write("Fetched Data:")
-                    st.dataframe(df_publications)
-                else:
-                    st.write("No results found for the query.")
+                try:
+                    # Fetch and display data based on user input
+                    results = fetch_publications(query, num_results=num_results_slider)
+                    
+                    if results:
+                        df_publications = extract_publication_data(results)
+                        st.success(f"Successfully fetched {len(results)} publications!")
+                        st.write("Fetched Data:")
+                        st.dataframe(df_publications)
+                    else:
+                        st.warning("No results found for the query.")
+                except Exception as e:
+                    st.error(f"Error fetching publications: {str(e)}")
 
     # Tabs for different functionalities
     if not df_publications.empty:
@@ -416,24 +446,63 @@ def main():
         with tab1:
             st.write("### Citation Analysis")
             st.write("This tab shows the number of publications per year and the citation distribution.")
-            visualize_citation_trends(df_publications)
+            try:
+                visualize_citation_trends(df_publications)
+            except Exception as e:
+                st.error(f"Error in citation analysis: {str(e)}")
 
         with tab2:
             st.write("### Keyword Analysis")
             st.write("This tab shows the most frequent keywords in the publication titles.")
-            common_keywords = analyze_keywords_in_titles(df_publications, num_keywords=10)
-            st.write("Most common keywords:", common_keywords)
+            try:
+                common_keywords = analyze_keywords_in_titles(df_publications, num_keywords=10)
+                st.write("Most common keywords:")
+                # Display keywords in a more readable format
+                for keyword, count in common_keywords:
+                    st.write(f"- {keyword}: {count} occurrences")
+            except Exception as e:
+                st.error(f"Error in keyword analysis: {str(e)}")
 
         with tab3:
             st.write("### Citation Statistics")
-            st.write("This tab shows basic statistics for citation counts (e.g., mean, median, standard deviation).")
-            citation_stats = df_publications['citations'].describe()
-            st.write(citation_stats)
+            st.write("This tab shows basic statistics for citation counts.")
+            try:
+                citation_stats = df_publications['citations'].describe()
+                # Format the statistics nicely
+                st.write("Summary Statistics:")
+                cols = st.columns(2)
+                with cols[0]:
+                    st.metric("Total Papers", len(df_publications))
+                    st.metric("Mean Citations", f"{citation_stats['mean']:.2f}")
+                    st.metric("Median Citations", f"{citation_stats['50%']:.2f}")
+                with cols[1]:
+                    st.metric("Max Citations", int(citation_stats['max']))
+                    st.metric("Min Citations", int(citation_stats['min']))
+                    st.metric("Std Dev", f"{citation_stats['std']:.2f}")
+            except Exception as e:
+                st.error(f"Error in citation statistics: {str(e)}")
 
         with tab4:
             st.write("### Author Insights")
             st.write("This tab shows a network graph of author collaborations.")
-            visualize_author_network(df_publications)
+            try:
+                visualize_author_network(df_publications)
+                
+                # Add author statistics
+                st.subheader("Author Statistics")
+                total_authors = sum(len(authors) if isinstance(authors, list) else 1 
+                                  for authors in df_publications['author'])
+                unique_authors = len(set([author for authors in df_publications['author'] 
+                                        for author in (authors if isinstance(authors, list) else [authors])]))
+                
+                cols = st.columns(2)
+                with cols[0]:
+                    st.metric("Total Authors", total_authors)
+                with cols[1]:
+                    st.metric("Unique Authors", unique_authors)
+                
+            except Exception as e:
+                st.error(f"Error in author analysis: {str(e)}")
 
         with tab5:
             st.write("### Topics Analysis")
@@ -441,11 +510,11 @@ def main():
             
             # Add number of topics selector
             num_topics = st.slider('Select number of topics to extract:', 
-                             min_value=2, max_value=10, value=5)
+                                min_value=2, max_value=10, value=5)
             
             # Add number of words per topic selector
             num_words = st.slider('Select number of words per topic:', 
-                            min_value=5, max_value=20, value=10)
+                                min_value=5, max_value=20, value=10)
             
             # Check if we have abstracts to analyze
             if df_publications['abstract'].isna().all() or all(df_publications['abstract'] == 'N/A'):
@@ -461,6 +530,10 @@ def main():
                         st.subheader("Topic-Word Distributions")
                         visualize_topics(topics_data)
                         
+                        # Display topic table
+                        st.subheader("Topics Summary")
+                        create_topic_table(topics_data)
+                        
                         # Display document-topic assignments
                         st.subheader("Document-Topic Assignments")
                         doc_topics_df = pd.DataFrame({
@@ -469,21 +542,30 @@ def main():
                             'Top Words': [topics_data[topic]['words'][:5] for topic in dominant_topics]
                         })
                         st.dataframe(doc_topics_df)
-                        
-                        # Add interactive visualization
-                        if doc_term_matrix.shape[1] > 0:  # Check if we have terms to visualize
-                            st.subheader("Interactive Topic Visualization")
-                            st.write("This visualization shows the relationships between topics and terms. " +
-                                    "Each bubble represents a topic, and the distance between bubbles " +
-                                    "indicates their similarity.")
-                            try:
-                                create_interactive_topic_viz(vectorizer, lda_model, doc_term_matrix)
-                            except Exception as viz_error:
-                                st.error(f"Error creating interactive visualization: {str(viz_error)}")
-                        else:
-                            st.warning("Not enough terms found for interactive visualization.")
+
                     except Exception as e:
                         st.error(f"Error during topic analysis: {str(e)}")
+
+        # Add export functionality
+        st.sidebar.header("Export Options")
+        if st.sidebar.button("Export Results"):
+            try:
+                # Create a BytesIO object to store the Excel file
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    df_publications.to_excel(writer, sheet_name='Publications', index=False)
+                    if 'doc_topics_df' in locals():
+                        doc_topics_df.to_excel(writer, sheet_name='Topic Analysis', index=False)
+                
+                # Provide download button
+                st.sidebar.download_button(
+                    label="Download Excel file",
+                    data=output.getvalue(),
+                    file_name="bibliometric_analysis.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+            except Exception as e:
+                st.sidebar.error(f"Error exporting results: {str(e)}")
 
     # Footer
     st.markdown("<hr><center><small>This tool is developed by Dr. Madeeh Elgedawy</small></center>", unsafe_allow_html=True)
