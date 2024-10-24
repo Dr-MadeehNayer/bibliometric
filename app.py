@@ -9,7 +9,7 @@ import re
 from collections import Counter
 
 # Function to fetch publications based on a search query
-def fetch_publications(query, num_results=50):
+def fetch_publications(query, num_results=10):
     search_query = scholarly.search_pubs(query)
     results = []
     for _ in range(num_results):
@@ -115,50 +115,73 @@ def analyze_keywords_in_titles(df, num_keywords=10):
     return common_keywords
 
 # Streamlit app layout
-st.title('Bibliometric Analysis with Google Scholar Data - IPA Case Study')
+st.title('Bibliometric Analysis with Google Scholar Data')
 
-# User inputs
-query = st.text_input('Enter your search query (e.g., "artificial intelligence in healthcare")', '')
+# File upload section
+uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
 
-# Combine slider and textbox to pick number of articles
-st.write("Select or enter the number of articles to retrieve:")
-num_results_slider = st.slider('Pick the number of articles:', min_value=1, max_value=500, value=50)
+# Initialize DataFrame for publications
+df_publications = pd.DataFrame()
 
-# Use the textbox value if it's been entered, otherwise use the slider value
-num_results = num_results_slider
+# If CSV file is uploaded, load the data into DataFrame
+if uploaded_file:
+    df_publications = pd.read_csv(uploaded_file)
+    st.write("Uploaded Data:")
+    st.dataframe(df_publications)
+else:
+    # User inputs if no file is uploaded
+    query = st.text_input('Enter your search query (e.g., "artificial intelligence in healthcare")', '')
 
-if query:
-    # Fetch and display data based on user input
-    results = fetch_publications(query, num_results=num_results)
-    
-    if results:
-        df_publications = extract_publication_data(results)
+    # Combine slider and textbox to pick number of articles
+    st.write("Select or enter the number of articles to retrieve:")
+    num_results_slider = st.slider('Pick the number of articles:', min_value=1, max_value=100, value=10)
+    num_results_textbox = st.number_input('Or enter the number of articles:', min_value=1, max_value=100, value=num_results_slider)
+
+    # Use the textbox value if it's been entered, otherwise use the slider value
+    num_results = num_results_textbox if num_results_textbox else num_results_slider
+
+    if query:
+        # Fetch and display data based on user input
+        results = fetch_publications(query, num_results=num_results)
         
-        # Display fetched data
-        st.write("Fetched Data:")
+        if results:
+            df_publications = extract_publication_data(results)
+            st.write("Fetched Data:")
+            st.dataframe(df_publications)
+        else:
+            st.write("No results found for the query.")
+
+# Allow users to delete rows from the DataFrame via checkboxes
+if not df_publications.empty:
+    st.write("### Select rows to delete:")
+    delete_rows = st.multiselect('Select rows to delete', df_publications.index)
+
+    if st.button('Delete Selected Rows'):
+        # Drop selected rows
+        df_publications = df_publications.drop(delete_rows)
+        st.write("Updated Data after Deleting Rows:")
         st.dataframe(df_publications)
 
-        # Tabs for different functionalities
-        tab1, tab2, tab3 = st.tabs(["Citation Analysis", "Keyword Analysis", "Citation Statistics"])
+# Tabs for different functionalities
+if not df_publications.empty:
+    tab1, tab2, tab3 = st.tabs(["Citation Analysis", "Keyword Analysis", "Citation Statistics"])
 
-        with tab1:
-            st.write("### Citation Analysis")
-            st.write("This tab shows the number of publications per year and the citation distribution.")
-            visualize_citation_trends(df_publications)
+    with tab1:
+        st.write("### Citation Analysis")
+        st.write("This tab shows the number of publications per year and the citation distribution.")
+        visualize_citation_trends(df_publications)
 
-        with tab2:
-            st.write("### Keyword Analysis")
-            st.write("This tab shows the most frequent keywords in the publication titles.")
-            common_keywords = analyze_keywords_in_titles(df_publications, num_keywords=10)
-            st.write("Most common keywords:", common_keywords)
+    with tab2:
+        st.write("### Keyword Analysis")
+        st.write("This tab shows the most frequent keywords in the publication titles.")
+        common_keywords = analyze_keywords_in_titles(df_publications, num_keywords=10)
+        st.write("Most common keywords:", common_keywords)
 
-        with tab3:
-            st.write("### Citation Statistics")
-            st.write("This tab shows basic statistics for citation counts (e.g., mean, median, standard deviation).")
-            citation_stats = df_publications['citations'].describe()
-            st.write(citation_stats)
+    with tab3:
+        st.write("### Citation Statistics")
+        st.write("This tab shows basic statistics for citation counts (e.g., mean, median, standard deviation).")
+        citation_stats = df_publications['citations'].describe()
+        st.write(citation_stats)
 
-        # Footer
-        st.markdown("<hr><center><small>This tool is developed by Dr. Madeeh Elgedawy</small></center>", unsafe_allow_html=True)
-    else:
-        st.write("No results found for the query.")
+# Footer
+st.markdown("<hr><center><small>This tool is developed by Dr. Madeeh Elgedawy</small></center>", unsafe_allow_html=True)
