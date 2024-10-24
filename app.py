@@ -90,7 +90,7 @@ def analyze_keywords_in_titles(df, num_keywords=10):
     return common_keywords
 
 # Streamlit app layout
-st.title('Bibliometric Analysis with Google Scholar Data')
+st.title('Bibliometric Analysis with Google Scholar Data - IPA Case Study')
 
 # User inputs
 query = st.text_input('Enter your search query (e.g., "artificial intelligence in healthcare")', '')
@@ -128,3 +128,5 @@ if query:
             st.write(citation_stats)
     else:
         st.write("No results found for the query.")
+
+st.markdown("<hr><center><small>This tool is developed by Dr. Madeeh Elgedawy</small></center>", unsafe_allow_html=True)
