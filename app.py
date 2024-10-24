@@ -239,7 +239,7 @@ def preprocess_text(text):
         return text
     return ''
 
-ddef get_feature_names(vectorizer):
+def get_feature_names(vectorizer):
     """Helper function to get feature names from vectorizer regardless of sklearn version"""
     try:
         return vectorizer.get_feature_names_out()
