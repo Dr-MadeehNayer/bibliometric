@@ -6,5 +6,5 @@ seaborn
 networkx
 scikit-learn
 nltk
-pyLDAvis
+pyldavis==3.2.2
 numpy
