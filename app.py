@@ -28,16 +28,32 @@ def extract_publication_data(results):
         'year': [],
         'citations': [],
         'abstract': [],  # Added abstract field
-        'url': []        # Added URL field
+        'url': [],       # Added URL field
+        'APA_citation': []  # Added APA citation field
     }
     
     for pub in results:
-        data['title'].append(pub['bib'].get('title', 'N/A'))
-        data['author'].append(pub['bib'].get('author', 'N/A'))
-        data['year'].append(pub['bib'].get('pub_year', 'N/A'))
-        data['citations'].append(pub.get('num_citations', 0))
-        data['abstract'].append(pub.get('bib', {}).get('abstract', 'N/A'))  # Fetching the abstract
-        data['url'].append(pub.get('pub_url', 'N/A'))  # Fetching the article URL
+        title = pub['bib'].get('title', 'N/A')
+        author = pub['bib'].get('author', 'N/A')
+        year = pub['bib'].get('pub_year', 'N/A')
+        citations = pub.get('num_citations', 0)
+        abstract = pub.get('bib', {}).get('abstract', 'N/A')
+        url = pub.get('pub_url', 'N/A')
+
+        # Extract the first author and format
+        if isinstance(author, list):
+            author = author[0] + " et al." if len(author) > 1 else author[0]
+
+        # Generate APA-style citation
+        apa_citation = f"{author} ({year}). {title}."
+
+        data['title'].append(title)
+        data['author'].append(author)
+        data['year'].append(year)
+        data['citations'].append(citations)
+        data['abstract'].append(abstract)
+        data['url'].append(url)
+        data['APA_citation'].append(apa_citation)
     
     return pd.DataFrame(data)
 
@@ -71,7 +87,6 @@ def visualize_citation_trends(df):
     ax.set_ylabel('Frequency')
     st.pyplot(fig)
 
-
 # Function to analyze keywords in titles
 def analyze_keywords_in_titles(df, num_keywords=10):
     titles = df['title'].tolist()
@@ -103,8 +118,15 @@ def analyze_keywords_in_titles(df, num_keywords=10):
 st.title('Bibliometric Analysis with Google Scholar Data - IPA Case Study')
 
 # User inputs
-query = st.text_input('Enter your search query (e.g., "explainable artificial intelligence")', '')
-num_results = st.number_input('Enter the number of articles to retrieve', min_value=1, max_value=500, value=100)
+query = st.text_input('Enter your search query (e.g., "artificial intelligence in healthcare")', '')
+
+# Combine slider and textbox to pick number of articles
+st.write("Select or enter the number of articles to retrieve:")
+num_results_slider = st.slider('Pick the number of articles:', min_value=1, max_value=100, value=10)
+num_results_textbox = st.number_input('Or enter the number of articles:', min_value=1, max_value=100, value=num_results_slider)
+
+# Use the textbox value if it's been entered, otherwise use the slider value
+num_results = num_results_textbox if num_results_textbox else num_results_slider
 
 if query:
     # Fetch and display data based on user input
@@ -136,7 +158,8 @@ if query:
             st.write("This tab shows basic statistics for citation counts (e.g., mean, median, standard deviation).")
             citation_stats = df_publications['citations'].describe()
             st.write(citation_stats)
+
+        # Footer
+        st.markdown("<hr><center><small>This tool is developed by Dr. Madeeh Elgedawy</small></center>", unsafe_allow_html=True)
     else:
         st.write("No results found for the query.")
-
-st.markdown("<hr><center><small>This tool is developed by Dr. Madeeh Elgedawy</small></center>", unsafe_allow_html=True)
