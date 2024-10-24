@@ -8,22 +8,11 @@ from collections import Counter
 import networkx as nx
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.decomposition import LatentDirichletAllocation
-import nltk
-from nltk.corpus import stopwords
-from nltk.tokenize import word_tokenize
 import numpy as np
 import pyLDAvis
 import pyLDAvis.sklearn
 import warnings
 warnings.filterwarnings('ignore')
-
-# Download required NLTK data
-try:
-    nltk.data.find('tokenizers/punkt')
-    nltk.data.find('corpora/stopwords')
-except LookupError:
-    nltk.download('punkt')
-    nltk.download('stopwords')
 
 # Function to fetch publications based on a search query
 def fetch_publications(query, num_results=10):
@@ -233,18 +222,21 @@ def visualize_author_network(df):
         st.write("No collaboration network could be generated. This might be because there are no papers with multiple authors in the dataset.")
 
 def preprocess_text(text):
-    """Preprocess text by removing stopwords and tokenizing"""
+    """Preprocess text without using NLTK"""
     if isinstance(text, str):
-        # Tokenize
-        tokens = word_tokenize(text.lower())
-        # Get stopwords
-        stop_words = set(stopwords.words('english'))
-        # Add custom stopwords relevant to academic papers
-        custom_stopwords = {'et', 'al', 'paper', 'study', 'research', 'method', 'results', 'analysis', 'data'}
-        stop_words.update(custom_stopwords)
-        # Remove stopwords and non-alphabetic tokens
-        tokens = [token for token in tokens if token.isalpha() and token not in stop_words]
-        return ' '.join(tokens)
+        # Convert to lowercase
+        text = text.lower()
+        
+        # Custom stopwords list
+        stop_words = {
+            'a', 'an', 'and', 'are', 'as', 'at', 'be', 'by', 'for', 'from', 
+            'has', 'he', 'in', 'is', 'it', 'its', 'of', 'on', 'that', 'the', 
+            'to', 'was', 'were', 'will', 'with', 'the', 'this', 'but', 'they',
+            'have', 'had', 'what', 'when', 'where', 'who', 'which', 'why',
+            'et', 'al', 'paper', 'study', 'research', 'method', 'results', 
+            'analysis', 'data', 'using', 'used', 'proposed', 'based'
+        }
+        return text
     return ''
 
 def analyze_topics(df, num_topics=5, num_words=10):
@@ -252,16 +244,27 @@ def analyze_topics(df, num_topics=5, num_words=10):
     # Preprocess abstracts
     processed_abstracts = [preprocess_text(abstract) for abstract in df['abstract']]
     
-    # Create document-term matrix
-    vectorizer = CountVectorizer(max_features=1000, min_df=2)
+    # Create document-term matrix with built-in stopwords and preprocessing
+    vectorizer = CountVectorizer(
+        max_features=1000,
+        min_df=2,
+        max_df=0.95,
+        stop_words='english',  # Using scikit-learn's built-in English stopwords
+        token_pattern=r'[a-zA-Z]+(?:\s[a-zA-Z]+)*',  # Match words and phrases
+    )
+    
     doc_term_matrix = vectorizer.fit_transform(processed_abstracts)
     
     # Create and fit LDA model
     lda_model = LatentDirichletAllocation(
         n_components=num_topics,
         random_state=42,
-        max_iter=20
+        max_iter=20,
+        learning_method='batch',
+        evaluate_every=-1,
+        n_jobs=-1,  # Use all available cores
     )
+    
     lda_output = lda_model.fit_transform(doc_term_matrix)
     
     # Get feature names (words)
@@ -391,37 +394,52 @@ def main():
             
             # Add number of topics selector
             num_topics = st.slider('Select number of topics to extract:', 
-                                 min_value=2, max_value=10, value=5)
+                             min_value=2, max_value=10, value=5)
             
             # Add number of words per topic selector
             num_words = st.slider('Select number of words per topic:', 
-                                min_value=5, max_value=20, value=10)
+                            min_value=5, max_value=20, value=10)
             
-            # Perform topic analysis
-            with st.spinner('Analyzing topics...'):
-                topics_data, dominant_topics, topic_distributions, vectorizer, lda_model, doc_term_matrix = \
-                    analyze_topics(df_publications, num_topics=num_topics, num_words=num_words)
-                
-                # Display topic visualizations
-                st.subheader("Topic-Word Distributions")
-                visualize_topics(topics_data)
-                
-                # Display document-topic assignments
-                st.subheader("Document-Topic Assignments")
-                doc_topics_df = pd.DataFrame({
-                    'Title': df_publications['title'],
-                    'Dominant Topic': dominant_topics + 1,
-                    'Top Words': [topics_data[topic]['words'][:5] for topic in dominant_topics]
-                })
-                st.dataframe(doc_topics_df)
-                
-                # Add interactive visualization
-                st.subheader("Interactive Topic Visualization")
-                st.write("This visualization shows the relationships between topics and terms. " +
-                        "Each bubble represents a topic, and the distance between bubbles " +
-                        "indicates their similarity.")
-                create_interactive_topic_viz(vectorizer, lda_model, doc_term_matrix)
+            # Check if we have abstracts to analyze
+            if df_publications['abstract'].isna().all() or all(df_publications['abstract'] == 'N/A'):
+                st.warning("No abstracts available for topic analysis.")
+            else:
+                # Perform topic analysis
+                with st.spinner('Analyzing topics...'):
+                    try:
+                        topics_data, dominant_topics, topic_distributions, vectorizer, lda_model, doc_term_matrix = \
+                            analyze_topics(df_publications, num_topics=num_topics, num_words=num_words)
+                        
+                        # Display topic visualizations
+                        st.subheader("Topic-Word Distributions")
+                        visualize_topics(topics_data)
+                        
+                        # Display document-topic assignments
+                        st.subheader("Document-Topic Assignments")
+                        doc_topics_df = pd.DataFrame({
+                            'Title': df_publications['title'],
+                            'Dominant Topic': dominant_topics + 1,
+                            'Top Words': [topics_data[topic]['words'][:5] for topic in dominant_topics]
+                        })
+                        st.dataframe(doc_topics_df)
+                        
+                        # Add interactive visualization
+                        if doc_term_matrix.shape[1] > 0:  # Check if we have terms to visualize
+                            st.subheader("Interactive Topic Visualization")
+                            st.write("This visualization shows the relationships between topics and terms. " +
+                                    "Each bubble represents a topic, and the distance between bubbles " +
+                                    "indicates their similarity.")
+                            try:
+                                create_interactive_topic_viz(vectorizer, lda_model, doc_term_matrix)
+                            except Exception as viz_error:
+                                st.error(f"Error creating interactive visualization: {str(viz_error)}")
+                        else:
+                            st.warning("Not enough terms found for interactive visualization.")
+                    except Exception as e:
+                        st.error(f"Error during topic analysis: {str(e)}")
 
+    # Footer
+    st.markdown("<hr><center><small>This tool is developed by Dr. Madeeh Elgedawy</small></center>", unsafe_allow_html=True)
 
-# Footer
-st.markdown("<hr><center><small>This tool is developed by Dr. Madeeh Elgedawy</small></center>", unsafe_allow_html=True)
+if __name__ == "__main__":
+    main()
