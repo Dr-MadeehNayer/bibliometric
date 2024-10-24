@@ -1,5 +1,3 @@
-# app.py
-
 import streamlit as st
 from scholarly import scholarly
 import pandas as pd
@@ -8,6 +6,24 @@ import seaborn as sns
 import re
 from collections import Counter
 import networkx as nx
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.decomposition import LatentDirichletAllocation
+import nltk
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
+import numpy as np
+import pyLDAvis
+import pyLDAvis.sklearn
+import warnings
+warnings.filterwarnings('ignore')
+
+# Download required NLTK data
+try:
+    nltk.data.find('tokenizers/punkt')
+    nltk.data.find('corpora/stopwords')
+except LookupError:
+    nltk.download('punkt')
+    nltk.download('stopwords')
 
 # Function to fetch publications based on a search query
 def fetch_publications(query, num_results=10):
@@ -21,6 +37,7 @@ def fetch_publications(query, num_results=10):
             break
     return results
 
+# Function to extract relevant data from publications
 def extract_publication_data(results):
     data = {
         'title': [],
@@ -94,6 +111,7 @@ def extract_publication_data(results):
         data['APA_citation'].append(apa_citation)
     
     return pd.DataFrame(data)
+
 # Function for citation trend visualization
 def visualize_citation_trends(df):
     # Convert the 'year' column to numeric, setting errors='coerce' will convert non-integer values to NaN
@@ -214,6 +232,93 @@ def visualize_author_network(df):
     else:
         st.write("No collaboration network could be generated. This might be because there are no papers with multiple authors in the dataset.")
 
+def preprocess_text(text):
+    """Preprocess text by removing stopwords and tokenizing"""
+    if isinstance(text, str):
+        # Tokenize
+        tokens = word_tokenize(text.lower())
+        # Get stopwords
+        stop_words = set(stopwords.words('english'))
+        # Add custom stopwords relevant to academic papers
+        custom_stopwords = {'et', 'al', 'paper', 'study', 'research', 'method', 'results', 'analysis', 'data'}
+        stop_words.update(custom_stopwords)
+        # Remove stopwords and non-alphabetic tokens
+        tokens = [token for token in tokens if token.isalpha() and token not in stop_words]
+        return ' '.join(tokens)
+    return ''
+
+def analyze_topics(df, num_topics=5, num_words=10):
+    """Analyze topics in the abstracts using LDA"""
+    # Preprocess abstracts
+    processed_abstracts = [preprocess_text(abstract) for abstract in df['abstract']]
+    
+    # Create document-term matrix
+    vectorizer = CountVectorizer(max_features=1000, min_df=2)
+    doc_term_matrix = vectorizer.fit_transform(processed_abstracts)
+    
+    # Create and fit LDA model
+    lda_model = LatentDirichletAllocation(
+        n_components=num_topics,
+        random_state=42,
+        max_iter=20
+    )
+    lda_output = lda_model.fit_transform(doc_term_matrix)
+    
+    # Get feature names (words)
+    feature_names = vectorizer.get_feature_names_out()
+    
+    # Prepare topic visualization data
+    topics_data = []
+    for topic_idx, topic in enumerate(lda_model.components_):
+        top_words_idx = topic.argsort()[:-num_words-1:-1]
+        top_words = [feature_names[i] for i in top_words_idx]
+        word_weights = [topic[i] for i in top_words_idx]
+        topics_data.append({
+            'topic_id': topic_idx + 1,
+            'words': top_words,
+            'weights': word_weights
+        })
+    
+    # Get dominant topic for each document
+    dominant_topics = np.argmax(lda_output, axis=1)
+    topic_distributions = lda_output
+    
+    return topics_data, dominant_topics, topic_distributions, vectorizer, lda_model, doc_term_matrix
+
+def visualize_topics(topics_data):
+    """Create visualizations for topic analysis"""
+    # Topic-Word Distribution Plot
+    for topic in topics_data:
+        fig, ax = plt.subplots(figsize=(10, 4))
+        y_pos = np.arange(len(topic['words']))
+        
+        # Create horizontal bar chart
+        bars = ax.barh(y_pos, topic['weights'], align='center')
+        ax.set_yticks(y_pos)
+        ax.set_yticklabels(topic['words'])
+        ax.invert_yaxis()
+        ax.set_xlabel('Weight')
+        ax.set_title(f'Top Words in Topic {topic["topic_id"]}')
+        
+        # Add weight values on the bars
+        for i, bar in enumerate(bars):
+            width = bar.get_width()
+            ax.text(width, bar.get_y() + bar.get_height()/2,
+                   f'{topic["weights"][i]:.3f}',
+                   ha='left', va='center', x=width+0.01)
+        
+        st.pyplot(fig)
+        plt.close()
+
+def create_interactive_topic_viz(vectorizer, lda_model, doc_term_matrix):
+    """Create interactive topic visualization using pyLDAvis"""
+    # Prepare pyLDAvis visualization
+    panel = pyLDAvis.sklearn.prepare(lda_model, doc_term_matrix, vectorizer)
+    # Convert to HTML
+    html_string = pyLDAvis.prepared_data_to_html(panel)
+    # Display in Streamlit
+    st.components.v1.html(html_string, width=1300, height=800)
+
 # Streamlit app layout
 def main():
     st.title('Bibliometric Analysis with Google Scholar Data')
@@ -250,7 +355,13 @@ def main():
 
     # Tabs for different functionalities
     if not df_publications.empty:
-        tab1, tab2, tab3, tab4 = st.tabs(["Citation Analysis", "Keyword Analysis", "Citation Statistics", "Author Insights"])
+        tab1, tab2, tab3, tab4, tab5 = st.tabs([
+            "Citation Analysis", 
+            "Keyword Analysis", 
+            "Citation Statistics", 
+            "Author Insights",
+            "Topics Analysis"
+        ])
 
         with tab1:
             st.write("### Citation Analysis")
@@ -274,8 +385,43 @@ def main():
             st.write("This tab shows a network graph of author collaborations.")
             visualize_author_network(df_publications)
 
-    # Footer
-    st.markdown("<hr><center><small>This tool is developed by Dr. Madeeh Elgedawy</small></center>", unsafe_allow_html=True)
+        with tab5:
+            st.write("### Topics Analysis")
+            st.write("This tab shows the main themes and topics discussed in the papers based on abstract analysis.")
+            
+            # Add number of topics selector
+            num_topics = st.slider('Select number of topics to extract:', 
+                                 min_value=2, max_value=10, value=5)
+            
+            # Add number of words per topic selector
+            num_words = st.slider('Select number of words per topic:', 
+                                min_value=5, max_value=20, value=10)
+            
+            # Perform topic analysis
+            with st.spinner('Analyzing topics...'):
+                topics_data, dominant_topics, topic_distributions, vectorizer, lda_model, doc_term_matrix = \
+                    analyze_topics(df_publications, num_topics=num_topics, num_words=num_words)
+                
+                # Display topic visualizations
+                st.subheader("Topic-Word Distributions")
+                visualize_topics(topics_data)
+                
+                # Display document-topic assignments
+                st.subheader("Document-Topic Assignments")
+                doc_topics_df = pd.DataFrame({
+                    'Title': df_publications['title'],
+                    'Dominant Topic': dominant_topics + 1,
+                    'Top Words': [topics_data[topic]['words'][:5] for topic in dominant_topics]
+                })
+                st.dataframe(doc_topics_df)
+                
+                # Add interactive visualization
+                st.subheader("Interactive Topic Visualization")
+                st.write("This visualization shows the relationships between topics and terms. " +
+                        "Each bubble represents a topic, and the distance between bubbles " +
+                        "indicates their similarity.")
+                create_interactive_topic_viz(vectorizer, lda_model, doc_term_matrix)
 
-if __name__ == "__main__":
-    main()
+
+# Footer
+st.markdown("<hr><center><small>This tool is developed by Dr. Madeeh Elgedawy</small></center>", unsafe_allow_html=True)
