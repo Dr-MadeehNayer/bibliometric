@@ -151,14 +151,20 @@ else:
         else:
             st.write("No results found for the query.")
 
-# Allow users to delete rows from the DataFrame via checkboxes
+# Allow users to delete rows from the DataFrame via checkboxes for each row
 if not df_publications.empty:
     st.write("### Select rows to delete:")
-    delete_rows = st.multiselect('Select rows to delete', df_publications.index)
+    
+    # Create checkboxes for each row
+    selected_rows = []
+    for index, row in df_publications.iterrows():
+        if st.checkbox(f"Delete {row['title']}", key=index):
+            selected_rows.append(index)
 
+    # Button to delete selected rows
     if st.button('Delete Selected Rows'):
         # Drop selected rows
-        df_publications = df_publications.drop(delete_rows)
+        df_publications = df_publications.drop(selected_rows)
         st.write("Updated Data after Deleting Rows:")
         st.dataframe(df_publications)
 
