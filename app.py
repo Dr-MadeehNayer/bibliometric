@@ -48,9 +48,23 @@ def extract_publication_data(results):
         citations = pub.get('num_citations', 0)
         abstract = pub.get('bib', {}).get('abstract', 'N/A')
         url = pub.get('pub_url', 'N/A')
-        journal = pub['bib'].get('journal', 'N/A')  # Extract journal
         
-        # Get additional information for citation
+        # Extract journal information - check multiple possible fields
+        journal = 'N/A'
+        if 'journal' in pub['bib']:
+            journal = pub['bib']['journal']
+        elif 'venue' in pub['bib']:
+            journal = pub['bib']['venue']
+        elif 'conference' in pub['bib']:
+            journal = pub['bib']['conference']
+        elif 'publisher' in pub['bib']:
+            journal = pub['bib']['publisher']
+        
+        # Print for debugging
+        print(f"Publication: {title}")
+        print(f"Journal found: {journal}")
+        print(f"Raw bib data: {pub['bib']}")
+        
         volume = pub['bib'].get('volume', '')
         issue = pub['bib'].get('number', '')
         pages = pub['bib'].get('pages', '')
@@ -71,7 +85,7 @@ def extract_publication_data(results):
         apa_citation = f"{author_citation} ({year}). {title}"
         
         # Add journal info if available
-        if journal:
+        if journal and journal != 'N/A':
             apa_citation += f". {journal}"
             
             # Add volume, issue, pages
@@ -98,10 +112,19 @@ def extract_publication_data(results):
         data['citations'].append(citations)
         data['abstract'].append(abstract)
         data['url'].append(url)
-        data['journal'].append(journal)  # Store journal
+        data['journal'].append(journal)
         data['APA_citation'].append(apa_citation)
     
-    return pd.DataFrame(data)
+    # Create DataFrame
+    df = pd.DataFrame(data)
+    
+    # Print summary of journal data
+    print(f"\nTotal publications: {len(df)}")
+    print(f"Publications with journal info: {len(df[df['journal'] != 'N/A'])}")
+    print("\nUnique journals found:")
+    print(df['journal'].value_counts().head())
+    
+    return df
 
 
 # Function for citation trend visualization
