@@ -316,20 +316,13 @@ def visualize_topics(topics_data):
 def create_interactive_topic_viz(vectorizer, lda_model, doc_term_matrix):
     """Create interactive topic visualization using pyLDAvis"""
     try:
-        # Create the data for visualization
-        # Convert sparse matrix to dense if needed
-        if isinstance(doc_term_matrix, np.ndarray):
-            doc_term_matrix_dense = doc_term_matrix
-        else:
-            doc_term_matrix_dense = doc_term_matrix.todense()
-        
-        # Prepare the parameters for pyLDAvis
-        prepared_data = pyLDAvis._prepare(
-            topic_term_dists=lda_model.components_,
-            doc_topic_dists=lda_model.transform(doc_term_matrix),
-            doc_lengths=np.sum(doc_term_matrix_dense, axis=1).A1,
-            vocab=vectorizer.get_feature_names_out(),
-            term_frequency=np.sum(doc_term_matrix_dense, axis=0).A1
+        # Use prepare_sklearn directly
+        prepared_data = pyLDAvis.sklearn.prepare(
+            lda_model, 
+            doc_term_matrix, 
+            vectorizer,
+            mds='mmds',  # using metric MDS
+            sort_topics=True
         )
         
         # Convert to HTML
