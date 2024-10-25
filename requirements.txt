@@ -11,3 +11,4 @@ scipy
 funcy>=1.17
 joblib>=1.2.0
 gensim>=4.0.0
+streamlit-aggrid
