@@ -11,8 +11,45 @@ from sklearn.decomposition import LatentDirichletAllocation
 import numpy as np
 import pyLDAvis
 import pyLDAvis.sklearn
+from st_aggrid import AgGridOptions, AgGrid, GridUpdateMode, DataReturnMode
 import warnings
 warnings.filterwarnings('ignore')
+
+def display_publications_grid(df_publications):
+    """
+    Display publications in an interactive grid with selection capabilities
+    """
+    # Configure grid options
+    grid_options = {
+        'columnDefs': [
+            {
+                'headerName': 'Select',
+                'field': 'selected',
+                'checkboxSelection': True,
+                'headerCheckboxSelection': True,
+                'width': 50
+            },
+            {'headerName': 'Title', 'field': 'title', 'width': 300},
+            {'headerName': 'Authors', 'field': 'author_display', 'width': 200},
+            {'headerName': 'Year', 'field': 'year', 'width': 100},
+            {'headerName': 'Citations', 'field': 'citations', 'width': 100},
+            {'headerName': 'Journal', 'field': 'journal', 'width': 200}
+        ],
+        'rowSelection': 'multiple',
+        'suppressRowClickSelection': True,
+        'domLayout': 'normal'
+    }
+
+    # Create the grid
+    grid_response = AgGrid(
+        df_publications,
+        grid_options,
+        update_mode=GridUpdateMode.SELECTION_CHANGED,
+        data_return_mode=DataReturnMode.FILTERED_AND_SORTED,
+        fit_columns_on_grid_load=True
+    )
+
+    return grid_response
 
 # Function to fetch publications based on a search query
 def fetch_publications(query, num_results=10):
@@ -523,10 +560,23 @@ def analyze_prolific_authors(df):
 def main():
     st.title('Bibliometric Analysis with Google Scholar Data')
 
-    # Add sidebar for search settings
-    st.sidebar.header("Search Settings")
-    if st.sidebar.checkbox("Use custom search options", False):
-        st.sidebar.info("Customize your search parameters")
+    st.subheader("Publications Data")
+        
+    # Display the interactive grid
+    grid_response = display_publications_grid(df_publications)
+    
+    # Add delete button
+    if st.button('Delete Selected Rows'):
+        # Get selected rows
+        selected_rows = grid_response['selected_rows']
+        selected_titles = [row['title'] for row in selected_rows]
+        
+        # Remove selected rows
+        df_publications = df_publications[~df_publications['title'].isin(selected_titles)].copy()
+        df_publications.reset_index(drop=True, inplace=True)
+        
+        st.success(f"Deleted {len(selected_titles)} selected rows!")
+        st.experimental_rerun()  # Refresh the page
         
     # File upload section
     uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
